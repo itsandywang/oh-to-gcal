@@ -23,6 +23,7 @@ with open(CONFIG_FILE, "r") as config_file:
 
 UNIQNAME = config["uniqname"]
 OH_GOOGLE_SHEET_ID = config["oh_google_sheets_id"]
+OH_LINK = config["oh_link"]
 SEMESTER = config["semester"]
 MONTH_TO_NUM = config["months_to_num"]
 OH_WEEKDAYS = config["oh_weekdays"]
@@ -37,7 +38,6 @@ class Shift(yaml.YAMLObject):
     to .yml files, and easy deserialization from .yml files.
     """
     yaml_tag = "!Shift"  # sets class tag for yml serialization
-
     def __init__(self, month: str = None, day: int = None, weekday: str = None, 
                 type: str = None, start_time: str = None, end_time: str = None,
                 in_main_room: bool = False, gcal_event_id: str = None):
@@ -101,25 +101,7 @@ class Scraper:
     """
     def __init__(self):
         creds = None
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first
-        # time.
-        if os.path.exists("token.json"):
-            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-            # If there are no (valid) credentials available, let the user log in.
-        if not creds or not creds.valid:
-            if (
-                creds and creds.expired and creds.refresh_token
-            ):  # if possible, refresh token
-                creds.refresh(Request())
-            else:  # otherwise, use OAuth Client credentials to generate access/refresh token creds
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    "credentials.json", SCOPES
-                )
-                creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open("token.json", "w") as token:
-                token.write(creds.to_json())
+        creds = self.__authenticate(creds)
 
         writeback_files = [STORED_CALENDAR_FILE, GCAL_ID_FILE]
 
@@ -141,6 +123,41 @@ class Scraper:
         self.stored_schedule = stored_schedule if stored_schedule else {}
         self.gcal_id = gcal_id_dict["gcal_id"] if gcal_id_dict else None
         self.year = date.today().year
+
+
+    def __authenticate(self, creds):
+        """
+        Handles OAuth authentication so we can access Sheets and Calendar Services.
+        """
+        # The file token.json stores the user's access and refresh tokens, and is
+        # created automatically when the authorization flow completes for the first
+        # time.
+        if os.path.exists("token.json"): 
+            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+            # If there are no (valid) credentials available, let the user log in.
+        if not creds or not creds.valid:
+            if (creds and creds.expired and creds.refresh_token):  # if possible, refresh token
+                creds.refresh(Request())
+            else:  # otherwise, use OAuth Client credentials to generate access/refresh token creds
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    "credentials.json", SCOPES
+                )
+                creds = flow.run_local_server(port=0)
+            # Save the credentials for the next run
+            with open("token.json", "w") as token:
+                token.write(creds.to_json())
+
+        return creds
+    
+    def __get_schedule_from_background_colors(self,red:float, green:float, blue:float, **kwargs) -> str:
+        if (red == 0.8509804 and green == 0.91764706 and blue == 0.827451):
+            return "LIGHT"
+        elif (red == 1 and green == 0.9490196 and blue ==0.8):
+            return "REGULAR"
+        elif (red == 0.95686275 and green == 0.8 and blue == 0.8):
+            return "HEAVY"
+    
+        raise ValueError("Colors don't match any existing OH schedule types")
 
     def __get_merged_cells_with_text(self, sheet_name: str) -> list:
         result = self.sheet_service.get(
@@ -166,7 +183,7 @@ class Scraper:
 
     def __get_rows_of_data(self, sheet_name: str, startRowIndex: int,
         startColumnIndex: int, endRowIndex: int, endColumnIndex: int,
-    ):
+            ):
         day_schedule_range = indices_to_A1_notation(
             startRowIndex=startRowIndex,
             startColumnIndex=startColumnIndex,
@@ -210,6 +227,7 @@ class Scraper:
             "summary": f"{'MAIN ROOM - ' if gcal_shift.in_main_room is True else ''}EECS 280 OH",
             "start": {"dateTime": start_dt, "timeZone": "America/Detroit"},
             "end": {"dateTime": end_dt, "timeZone": "America/Detroit"},
+            "description": f"Queue Link: <a href='{OH_LINK}'>{OH_LINK}</a>"
         }
         return (
             self.gcal_service.events().insert(calendarId=gcal_id, body=body).execute()
@@ -258,9 +276,7 @@ class Scraper:
             # their cell range indices to search the cell space in which the 
             # configured uniqname might hold OH on the given type and day
             for oh_type, oh_type_info in cell_info.items():
-                print(oh_type, oh_type_info)
                 for weekday, oh_day_info in oh_type_info["days"].items():
-
                     rows = self.__get_rows_of_data(
                         "Assignments",
                         oh_day_info["startRowIndex"],
@@ -273,7 +289,6 @@ class Scraper:
                         for cell in rows[0]["values"]
                         if cell.get("effectiveValue") != None
                     ]  # grabs all half hour start timestamps for OH that day
-
                     num_rows, num_cols = len(rows), len(times)
                     cols = [
                         [rows[i]["values"][j] for i in range(1, num_rows)]
@@ -313,7 +328,7 @@ class Scraper:
                         shifts.append(shift)
 
         except HttpError as err:
-            print(err)
+            raise(err)
 
     def sync_schedule(self) -> None:
         year = self.year
@@ -348,7 +363,7 @@ class Scraper:
                             dt = datetime(year, MONTH_TO_NUM[month], cell_day)
                             weekday_str = dt.strftime("%A").upper()
                             try:
-                                oh_type = get_schedule_from_background_colors(**background_colors)
+                                oh_type = self.__get_schedule_from_background_colors(**background_colors)
                                 self.schedule[month][cell_day] = []
                                 for s in self.assignments[oh_type][weekday_str]:
                                     shift = deepcopy(s)
@@ -359,20 +374,20 @@ class Scraper:
                                         type=oh_type,
                                     )
                                     self.schedule[month][cell_day].append(shift)
-                            except ValueError as e:  # TODO:
-                                print(e)
+                            except ValueError as e: # some days simply don't have OH (no matching background colors)
+                                continue
         except HttpError as err:
-            print(err)
+            raise(err)
 
     def update_calendar(self):
         try:
             if self.gcal_id is None:  # no calendar yet, create one
                 body = {"summary": "EECS 280 OH", "timeZone": "America/Detroit"}
                 created_calendar = self.gcal_service.calendars().insert(body=body).execute()
-                self.gcal_id = gcal_id_dict = {"gcal_id": created_calendar["id"]}
+                gcal_id_dict = {"gcal_id": created_calendar["id"]}
                 with open(GCAL_ID_FILE, "w") as gcal_id_file:  # write back in case of crash
                     yaml.dump(gcal_id_dict, gcal_id_file, sort_keys=False)
-
+                self.gcal_id = gcal_id_dict["gcal_id"]
             gcal_id = self.gcal_id
             cal = self.stored_schedule
             
@@ -385,18 +400,20 @@ class Scraper:
                                 and (old_cal_day := cal.setdefault(month, {}).setdefault(day, [])) \
                                 != (new_cal_day := self.schedule[month][day]
                                 ):
-                            print("mistmatch")
                             for old_shift in old_cal_day:  # get rid of all old events
-                                self.gcal_service.events() \
-                                .delete(calendarId=gcal_id, eventId=old_shift.gcal_event_id).execute()
+                                try:
+                                    self.gcal_service.events() \
+                                    .delete(calendarId=gcal_id, eventId=old_shift.gcal_event_id).execute()
+                                except Exception as e:
+                                    print("deletion failed")
                             old_cal_day.clear()
-
+                            with open(STORED_CALENDAR_FILE, "w") as gcal_file:
+                                yaml.dump(cal, gcal_file, sort_keys=False) 
+                            
                             # look up shifts that should be on this day
-                            oh_type = shifts_for_day[0].type
-                            print(f"shifts_for_day: {shifts_for_day}. oh_type: {oh_type}")
-                            weekday = shifts_for_day[0].weekday
-                            # shifts = self.assignments[oh_type][weekday]
                             for shift in shifts_for_day:
+                                oh_type = shifts_for_day[0].type
+                                weekday = shifts_for_day[0].weekday
                                 gcal_shift = deepcopy(shift)
                                 gcal_shift.update(month=month, day=day, weekday=weekday, type=oh_type)
                                 cal.setdefault(month, {}).setdefault(day, []).append(gcal_shift)
@@ -408,7 +425,7 @@ class Scraper:
                                     yaml.dump(cal, gcal_file, sort_keys=False) 
 
         except HttpError as err:
-            print(err)
+            raise(err)
 
 
 if __name__ == "__main__":

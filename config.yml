@@ -1,0 +1,24 @@
+uniqname: <uniqname> # TODO: enter your uniqname here
+oh_google_sheets_id: <google_sheet_id> # TODO: enter the Sheet ID (longest sequence of chars between slashes in the URL)
+semester: Winter # TODO: set to 'Winter' or 'Fall'
+oh_link: 'https://eecsoh.eecs.umich.edu/'
+oh_weekdays: 
+- MONDAY
+- TUESDAY
+- WEDNESDAY
+- THURSDAY
+- FRIDAY
+- SUNDAY
+months_to_num:
+  JANUARY: 1
+  FEBRUARY: 2
+  MARCH: 3
+  APRIL: 4
+  MAY: 5
+  AUGUST: 8
+  SEPTEMBER: 9
+  OCTOBER: 10
+  NOVEMBER: 11
+  DECEMBER: 12
+gcal_file: events.yml # relative path of where we'll store our Google calendar events (relative to current working directory)
+gcal_id_file: gcal_id.yml # relative path of where we'll store our Google calendar ID (relative to current working directory)

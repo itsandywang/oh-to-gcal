@@ -3,7 +3,7 @@ __pycache__/
 assignments.yml
 credentials.json
 events.yml
+gcal_id.yml
 schedule.yml
 .vscode/
-env/
 token.json
