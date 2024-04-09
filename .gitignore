@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+assignments.yml
+credentials.json
+events.yml
+schedule.yml
+.vscode/
+env/
+token.json
