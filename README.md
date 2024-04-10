@@ -1,5 +1,5 @@
 # EECS 280 Office Hours Google Sheet To Google Calender Scraper
-This script uses the Google Sheets & Google Calendar API to scrape the 280 OH Scheduling spreadsheet and create Google Calender events for a a configured uniqname. Distinct events are created for main room office hour sessions and regular breakout room sessions. 
+This script uses the Google Sheets & Google Calendar API to scrape the 280 OH Scheduling spreadsheet and create Google Calender events for a configured uniqname. Distinct events are created for main room office hour sessions and regular breakout room sessions. 
 
 ## Setting up the Script: 
 1. Clone this repo and `cd` into the repo
@@ -15,7 +15,6 @@ as `credentials.json`, and move it directly inside the project directory.
 
 ## Limitations:
 1. Can't distinguish between online and in-person office hours, as this information isn't readily available in the sheets
-2. Can't pick up on swaps 
 
 ## Restarting
 If you ever run into a situation during running/testing where you want to start the script anew, simply delete the secondary Calendar the script created, and delete the `gcal_file` and `gcal_id_file` specified in the `config.yml`
